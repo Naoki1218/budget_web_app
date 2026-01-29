@@ -27,6 +27,7 @@ export default function ClubBudgetManager() {
   const [showLogin, setShowLogin] = useState(false);
   const [pwd, setPwd] = useState('');
   const [loginType, setLoginType] = useState('admin'); // 'admin' or 'user'
+  const [selectedMember, setSelectedMember] = useState(''); // 選択されたメンバー
   const [page, setPage] = useState('home');
   const [members, setMembers] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -83,16 +84,29 @@ export default function ClubBudgetManager() {
   const login = () => {
     if (loginType === 'admin') {
       // 管理者ログイン
-      if (pwd === (storage.get('pwd') || 'club2025')) {
-        const member = members.find(m => m.isAdmin);
-        setCurrentUser(member || { id: 'admin', name: '管理者', isAdmin: true });
+      if (!selectedMember) {
+        alert('メンバーを選択してください');
+        return;
+      }
+      
+      const member = members.find(m => m.id === parseInt(selectedMember));
+      if (!member || !member.isAdmin) {
+        alert('管理者権限がないメンバーです');
+        return;
+      }
+      
+      const initialPwd = storage.get('pwd') || 'club2025';
+      const memberPwd = member.password || initialPwd;
+      
+      if (pwd === memberPwd) {
+        setCurrentUser(member);
         setIsAdmin(true);
         setShowLogin(false);
         setPwd('');
+        setSelectedMember('');
         
         // 初回ログイン判定（初期パスワードの場合）
-        const currentPwd = storage.get('pwd');
-        if (!currentPwd || pwd === 'club2025') {
+        if (!member.password) {
           setIsFirstLogin(true);
           setShowPasswordChange(true);
         }
@@ -169,8 +183,17 @@ export default function ClubBudgetManager() {
       return;
     }
     
-    // パスワードを保存
-    storage.set('pwd', newPassword);
+    // 現在のユーザーのパスワードを更新
+    const updatedMembers = members.map(m => {
+      if (m.id === currentUser.id) {
+        return { ...m, password: newPassword };
+      }
+      return m;
+    });
+    
+    setMembers(updatedMembers);
+    storage.set('members', updatedMembers);
+    
     setNewPassword('');
     setConfirmPassword('');
     setShowPasswordChange(false);
@@ -653,7 +676,7 @@ export default function ClubBudgetManager() {
                   <LogIn className="text-cyan-600 mr-2" size={32} />
                   <h2 className="text-2xl font-bold text-cyan-900">ログイン</h2>
                 </div>
-                <button onClick={() => {setShowLogin(false); setPwd(''); setLoginType('admin');}} className="text-gray-500"><X size={24}/></button>
+                <button onClick={() => {setShowLogin(false); setPwd(''); setLoginType('admin'); setSelectedMember('');}} className="text-gray-500"><X size={24}/></button>
               </div>
               
               {/* ログインタイプ選択 */}
@@ -685,15 +708,27 @@ export default function ClubBudgetManager() {
               {/* 管理者ログイン */}
               {loginType === 'admin' && (
                 <div>
+                  <select
+                    value={selectedMember}
+                    onChange={(e) => setSelectedMember(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 mb-4"
+                  >
+                    <option value="">メンバーを選択してください</option>
+                    {members.filter(m => m.isAdmin).map(member => (
+                      <option key={member.id} value={member.id}>
+                        {member.name}
+                      </option>
+                    ))}
+                  </select>
                   <input
                     type="password"
                     value={pwd}
                     onChange={(e) => setPwd(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && login()}
-                    placeholder="管理者パスワード"
+                    placeholder="パスワード"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 mb-4"
                   />
-                  <button onClick={login} className="w-full bg-cyan-600 text-white py-3 rounded-lg hover:bg-cyan-700 font-medium">管理者ログイン</button>
+                  <button onClick={login} className="w-full bg-cyan-600 text-white py-3 rounded-lg hover:bg-cyan-700 font-medium">ログイン</button>
                   <p className="text-xs text-gray-500 mt-4 text-center">初期パスワード: club2025</p>
                 </div>
               )}
