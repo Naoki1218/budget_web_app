@@ -26,6 +26,7 @@ export default function ClubBudgetManager() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [pwd, setPwd] = useState('');
+  const [loginType, setLoginType] = useState('admin'); // 'admin' or 'user'
   const [page, setPage] = useState('home');
   const [members, setMembers] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -80,26 +81,34 @@ export default function ClubBudgetManager() {
   }, []);
 
   const login = () => {
-    if (pwd === (storage.get('pwd') || 'club2025')) {
-      const member = members.find(m => m.isAdmin);
-      setCurrentUser(member || { id: 'admin', name: '管理者', isAdmin: true });
-      setIsAdmin(true);
-      setShowLogin(false);
-      setPwd('');
-      
-      // 初回ログイン判定（初期パスワードの場合）
-      const currentPwd = storage.get('pwd');
-      if (!currentPwd || pwd === 'club2025') {
-        setIsFirstLogin(true);
-        setShowPasswordChange(true);
+    if (loginType === 'admin') {
+      // 管理者ログイン
+      if (pwd === (storage.get('pwd') || 'club2025')) {
+        const member = members.find(m => m.isAdmin);
+        setCurrentUser(member || { id: 'admin', name: '管理者', isAdmin: true });
+        setIsAdmin(true);
+        setShowLogin(false);
+        setPwd('');
+        
+        // 初回ログイン判定（初期パスワードの場合）
+        const currentPwd = storage.get('pwd');
+        if (!currentPwd || pwd === 'club2025') {
+          setIsFirstLogin(true);
+          setShowPasswordChange(true);
+        }
+      } else {
+        alert('パスワードが違います');
       }
     } else {
-      alert('パスワードが違います');
+      // 一般ユーザー（閲覧モード）
+      setCurrentUser({ id: 'guest', name: 'ゲスト', isAdmin: false });
+      setIsAdmin(false);
+      setShowLogin(false);
     }
   };
 
   const addMember = () => {
-    if (!isAdmin) return;
+    if (!currentUser || !currentUser.isAdmin) return;
     if (!newName.trim()) return;
     const updated = [...members, { id: Date.now(), name: newName, isAdmin: false }];
     setMembers(updated);
@@ -108,14 +117,14 @@ export default function ClubBudgetManager() {
   };
 
   const delMember = (id) => {
-    if (!isAdmin) return;
+    if (!currentUser || !currentUser.isAdmin) return;
     const updated = members.filter(m => m.id !== id);
     setMembers(updated);
     storage.set('members', updated);
   };
 
   const toggleAdminRights = (memberId) => {
-    if (!isAdmin || !currentUser) return;
+    if (!currentUser || !currentUser.isAdmin) return;
     
     // 自分自身の権限は剥奪できない
     if (memberId === currentUser.id) {
@@ -183,7 +192,7 @@ export default function ClubBudgetManager() {
   };
 
   const handlePayClick = (mid, y, m) => {
-    if (!isAdmin) return;
+    if (!currentUser || !currentUser.isAdmin) return;
     const key = `${mid}-${y}-${m}`;
     const pay = payments[key];
     const mem = members.find(m => m.id === mid);
@@ -204,7 +213,7 @@ export default function ClubBudgetManager() {
   };
 
   const savePay = () => {
-    if (!isAdmin || !selPay) return;
+    if (!currentUser || !currentUser.isAdmin || !selPay) return;
     const { mid, y, m, key, name } = selPay;
     const newPay = { ...payments, [key]: { mid, y, m, date: new Date(payDate).toISOString(), by: '管理者', at: new Date().toISOString() } };
     setPayments(newPay);
@@ -221,7 +230,7 @@ export default function ClubBudgetManager() {
   };
 
   const delPay = () => {
-    if (!isAdmin || !selPay || !window.confirm('削除しますか？')) return;
+    if (!currentUser || !currentUser.isAdmin || !selPay || !window.confirm('削除しますか？')) return;
     const { mid, y, m, key } = selPay;
     const newPay = {...payments};
     delete newPay[key];
@@ -236,7 +245,7 @@ export default function ClubBudgetManager() {
   };
 
   const addTx = () => {
-    if (!isAdmin) return;
+    if (!currentUser || !currentUser.isAdmin) return;
     if (!newTx.amount || !newTx.category) {
       alert('金額とカテゴリを入力してください');
       return;
@@ -249,7 +258,7 @@ export default function ClubBudgetManager() {
   };
 
   const delTx = (id) => {
-    if (!isAdmin) return;
+    if (!currentUser || !currentUser.isAdmin) return;
     const tx = transactions.find(t => t.id === id);
     if (tx && tx.cat === '部費') {
       alert('部費は支払い管理画面から削除してください');
@@ -370,22 +379,33 @@ export default function ClubBudgetManager() {
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-4 sm:mb-6">
           <h1 className="text-2xl sm:text-4xl font-bold text-cyan-900">部費管理システム</h1>
-          {!isAdmin ? (
+          {!currentUser ? (
             <button onClick={() => setShowLogin(true)} className="flex items-center gap-2 bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-700 font-medium">
               <LogIn size={20}/>
-              <span className="hidden sm:inline">管理者ログイン</span>
+              <span className="hidden sm:inline">ログイン</span>
             </button>
           ) : (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">{currentUser?.name}</span>
-              <button onClick={() => setShowAdminManagement(true)} className="flex items-center gap-1 bg-purple-600 text-white px-3 py-1 rounded-lg hover:bg-purple-700 text-sm">
-                <Shield size={16}/>
-                <span className="hidden sm:inline">権限管理</span>
-              </button>
-              <button onClick={() => setShowPasswordChange(true)} className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 text-sm">
-                <Lock size={16}/>
-                <span className="hidden sm:inline">パスワード変更</span>
-              </button>
+              <span className="text-sm text-gray-600">
+                {currentUser.name}
+                {currentUser.isAdmin && (
+                  <span className="ml-2 bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs font-medium">
+                    管理者
+                  </span>
+                )}
+              </span>
+              {currentUser.isAdmin && (
+                <button onClick={() => setShowAdminManagement(true)} className="flex items-center gap-1 bg-purple-600 text-white px-3 py-1 rounded-lg hover:bg-purple-700 text-sm">
+                  <Shield size={16}/>
+                  <span className="hidden sm:inline">権限管理</span>
+                </button>
+              )}
+              {currentUser.isAdmin && (
+                <button onClick={() => setShowPasswordChange(true)} className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 text-sm">
+                  <Lock size={16}/>
+                  <span className="hidden sm:inline">パスワード変更</span>
+                </button>
+              )}
               <button onClick={logout} className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1 hover:bg-white/50 rounded">ログアウト</button>
             </div>
           )}
@@ -456,7 +476,7 @@ export default function ClubBudgetManager() {
                 </select>
               </div>
             </div>
-            {!isAdmin && <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">閲覧モード：編集するには管理者ログインが必要です</div>}
+            {!currentUser || !currentUser.isAdmin && <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">閲覧モード：編集するには管理者ログインが必要です</div>}
             
             <div className="mb-4">
               <div className="grid grid-cols-7 gap-0 border border-gray-300">
@@ -496,7 +516,7 @@ export default function ClubBudgetManager() {
                 {[2024,2025,2026,2027,2028].map(y => <option key={y} value={y}>{y}年度</option>)}
               </select>
             </div>
-            {!isAdmin && <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">閲覧モード：編集するには管理者ログインが必要です</div>}
+            {!currentUser || !currentUser.isAdmin && <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">閲覧モード：編集するには管理者ログインが必要です</div>}
             <div className="overflow-x-auto">
               <table className="w-full border-collapse min-w-max">
                 <thead><tr className="bg-cyan-100"><th className="border border-gray-300 px-2 sm:px-4 py-3 text-left font-bold text-gray-800 sticky left-0 bg-cyan-100 z-10">メンバー</th>{months.map((m,i) => <th key={i} className="border border-gray-300 px-2 sm:px-3 py-3 text-center font-bold text-gray-800 min-w-[50px] sm:min-w-[60px]">{m}</th>)}</tr></thead>
@@ -509,8 +529,8 @@ export default function ClubBudgetManager() {
         {page === 'members' && (
           <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
             <div className="flex items-center mb-6"><Users className="text-cyan-600 mr-2" size={24}/><h2 className="text-xl sm:text-2xl font-bold text-gray-800">メンバー管理</h2></div>
-            {!isAdmin && <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">閲覧モード：編集するには管理者ログインが必要です</div>}
-            {isAdmin && (
+            {!currentUser || !currentUser.isAdmin && <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">閲覧モード：編集するには管理者ログインが必要です</div>}
+            {currentUser && currentUser.isAdmin && (
               <div className="mb-6 p-4 bg-gray-50 rounded-lg">
                 <div className="flex gap-2">
                   <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addMember()} placeholder="メンバー名" className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"/>
@@ -530,7 +550,7 @@ export default function ClubBudgetManager() {
                       </span>
                     )}
                   </div>
-                  {isAdmin && (
+                  {currentUser && currentUser.isAdmin && (
                     <div className="flex items-center gap-2">
                       <button 
                         onClick={() => toggleAdminRights(m.id)} 
@@ -559,8 +579,8 @@ export default function ClubBudgetManager() {
         {page === 'transactions' && (
           <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
             <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-6">収支管理</h2>
-            {!isAdmin && <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">閲覧モード：編集するには管理者ログインが必要です</div>}
-            {isAdmin && (
+            {!currentUser || !currentUser.isAdmin && <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">閲覧モード：編集するには管理者ログインが必要です</div>}
+            {currentUser && currentUser.isAdmin && (
               <div className="mb-6 p-4 sm:p-6 bg-gray-50 rounded-lg">
                 <div className="space-y-4">
                   <div className="flex gap-2">
@@ -630,14 +650,61 @@ export default function ClubBudgetManager() {
             <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center">
-                  <Lock className="text-cyan-600 mr-2" size={32} />
-                  <h2 className="text-2xl font-bold text-cyan-900">管理者ログイン</h2>
+                  <LogIn className="text-cyan-600 mr-2" size={32} />
+                  <h2 className="text-2xl font-bold text-cyan-900">ログイン</h2>
                 </div>
-                <button onClick={() => {setShowLogin(false); setPwd('');}} className="text-gray-500"><X size={24}/></button>
+                <button onClick={() => {setShowLogin(false); setPwd(''); setLoginType('admin');}} className="text-gray-500"><X size={24}/></button>
               </div>
-              <input type="password" value={pwd} onChange={(e) => setPwd(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && login()} placeholder="パスワード" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 mb-4" />
-              <button onClick={login} className="w-full bg-cyan-600 text-white py-3 rounded-lg hover:bg-cyan-700 font-medium">ログイン</button>
-              <p className="text-xs text-gray-500 mt-4 text-center">初期パスワード: club2025</p>
+              
+              {/* ログインタイプ選択 */}
+              <div className="mb-6">
+                <div className="flex gap-2 mb-4">
+                  <button
+                    onClick={() => setLoginType('admin')}
+                    className={`flex-1 py-2 px-4 rounded-lg font-medium ${
+                      loginType === 'admin'
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    管理者
+                  </button>
+                  <button
+                    onClick={() => setLoginType('user')}
+                    className={`flex-1 py-2 px-4 rounded-lg font-medium ${
+                      loginType === 'user'
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    一般ユーザー
+                  </button>
+                </div>
+              </div>
+              
+              {/* 管理者ログイン */}
+              {loginType === 'admin' && (
+                <div>
+                  <input
+                    type="password"
+                    value={pwd}
+                    onChange={(e) => setPwd(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && login()}
+                    placeholder="管理者パスワード"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 mb-4"
+                  />
+                  <button onClick={login} className="w-full bg-cyan-600 text-white py-3 rounded-lg hover:bg-cyan-700 font-medium">管理者ログイン</button>
+                  <p className="text-xs text-gray-500 mt-4 text-center">初期パスワード: club2025</p>
+                </div>
+              )}
+              
+              {/* 一般ユーザーログイン */}
+              {loginType === 'user' && (
+                <div>
+                  <p className="text-sm text-gray-600 mb-4">一般ユーザーとして閲覧します</p>
+                  <button onClick={login} className="w-full bg-cyan-600 text-white py-3 rounded-lg hover:bg-cyan-700 font-medium">閲覧モードで開く</button>
+                </div>
+              )}
             </div>
           </div>
         )}
